@@ -1,0 +1,9 @@
+models/*.pickle
+models/*.pt
+models/*.png
+figures/2D_special/*.pdf
+env/*
+__pycache__/*
+.idea/*
+lps/*.txt
+lps/*.npy
