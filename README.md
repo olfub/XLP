@@ -1,4 +1,4 @@
-## Repository for "Why Should I Even Trust Linear Objective Function?": Explaining the Solutions of Linear Programs using Neural Encodings
+## Repository for "Elucidating Linear Programs by Neural Encodings"
 
 ## How to generate the data
 
