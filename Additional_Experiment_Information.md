@@ -6,7 +6,7 @@ In the image below, feature attributions for both features on the example of the
 
 Generally, it can be seen how the methods also differ in their single feature attributions and that feature attributions can vary significantly depending on the respective feature.
 
-![Single feature attributions for the Vertex Distance encoding](figures\single_feature_attributions.png)
+![Single feature attributions for the Vertex Distance encoding](https://github.com/olfub/XLP/blob/main/figures/single_feature_attributions.png?raw=true)
 
 In the following, we go into detail about the behavior of the attribution methods used in this paper and explain the differences between the attributions for the two features.
 
@@ -39,9 +39,9 @@ In addition to the results shown in the paper, a set of 10 examples from the eva
 Feature Permutation and LIME use perturbations of up to 10. For IG and Saliency, the results in large parts fit the patterns also discussed for smaller LPs.
 For FP and LIME, the results are not as easily made sense of. Here, the errors still left in the model might play an important role as there are many predictions made for the perturbations which could be false.
 
-![Additional Results for the Large-Scale Experiment 1](figures\large_lp_appendix_additional_results_1.png)
+![Additional Results for the Large-Scale Experiment 1](https://github.com/olfub/XLP/blob/main/figures/large_lp_appendix_additional_results_1.png?raw=true)
 
-![Additional Results for the Large-Scale Experiment 2](figures\large_lp_appendix_additional_results_2.png)
+![Additional Results for the Large-Scale Experiment 2](https://github.com/olfub/XLP/blob/main/figures/large_lp_appendix_additional_results_2.png?raw=true)
 
 ## Technical Details
 
