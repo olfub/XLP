@@ -204,25 +204,58 @@ def generate_simple_lp(dim_x, dim_b, random_seed, num_x, vary_c, vary_a, vary_b,
                         sol[i] = solve_lp(c[i], a, b)
         else:
             # one b for each instance
+            
+            # we want to set b not dependant on x
+            # we first sum over each constraint
+            b_ref = a.sum(axis=1)
+            if False:
+                # with this b, a datapoint x where all elements are 1 would be one of the largest feasible points
+                # if we set this as the "middle" / average b, we have a nice data range for x where these are 
+                # small values around 1
+                b_max = b_ref * 2
 
-            # generate x
-            x = np.random.rand(num_x, dim_x)
+            # the idea is as follows:
+            # using a reference value for b (calculated above), we determine the smallest axis intersections
+            # for each dimensions
+            # these determine the hyperrectangle we use to generate instances x
+            # however, these might lead to significantly imbalanced feasible and infeasible instances
+            # therefore, num_calibrate instances are used to change the size of this hyperrectangle
 
-            # set b so that Ax <= b in about half of the cases
-            b = np.zeros((num_x, dim_b))
-            for i in range(num_x):
-                if np.random.choice([0, 1]):
-                    # 50% of the time, just set b randomly, in the same interval as x
-                    # especially for higher dimensions, this will mostly (but not always) results in Ax > b
-                    b[i] = np.random.rand(dim_b)
+            # calculate axis intersections
+            a_temp = a / b_ref.reshape((b_ref.shape[0], 1))
+            axis_intersections = 1 / np.max(a_temp, axis=0)
+            # the following factor is always multiplied with the hyperrectangle
+            factor = 1
+            # number of instances used for calibrating the factor...
+            num_calibrate = 20000
+            # ...half of which will be used differently than the other half (see below)
+            nc_half = num_calibrate // 2
+            x = np.random.rand(num_calibrate, dim_x) * axis_intersections
+            b = np.random.rand(num_calibrate, dim_b) * b_ref
+
+            # first, generate nc_half instances; after each one, either decrease the factor if the instance
+            # was infeasible (as getting the hyperrectangle close to 0 will result in more feasible instances)
+            # or increase it if the instance was feasible (same logic, other way around)
+            for i in range(nc_half):
+                if np.all(np.matmul(a, (x[i] * factor).T) <= b[i]):
+                    factor += 0.01
                 else:
-                    # 50% of the time, set b so that it satisfies Ax <= b
-                    # here, b is set randomly in the interval between Ax and a maximum value
-                    # the maximum value is the largest possible result of Ax when A and x are both generated as values
-                    # between 0 and 1 (which is the case)
-                    ax = np.matmul(a, x[i].reshape((dim_x, 1)))
-                    temp = np.full_like(ax, dim_x) - ax
-                    b[i] = (ax + np.random.rand(dim_b).reshape((dim_b, 1)) * temp)[:, 0]
+                    factor -= 0.01
+
+            # for the other half of the instances, do the same as before but decrease the amount by which
+            # the factor changes more and more (like decreasing a learning rate)
+            for i in range(nc_half, num_calibrate):
+                change_by = 0.01 * (1 - ((i - nc_half) / nc_half))
+                if np.all(np.matmul(a, (x[i] * factor).T) <= b[i]):
+                    factor += change_by
+                else:
+                    factor -= change_by
+
+            # now actually generate the data using the determined factor
+            # by throwing away the instances used for calibrating, we make sure that there are no weird
+            # outliers and that all instances come from the same distribution
+            x = np.random.rand(num_x, dim_x) * axis_intersections * factor
+            b = np.random.rand(num_x, dim_b) * b_ref
 
             # solving the LPs
             if solve:

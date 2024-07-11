@@ -86,6 +86,8 @@ class SingleLPNetCustom(SingleLPNet):
                 next_neurons = 1
             elif neuron_dev == "dec":
                 next_neurons = int(0.5*next_neurons)
+                if next_neurons < 1:
+                    next_neurons = 1
             # TODO more neuron_devs?
             # next_neurons can stay unchanged for neuron_dev == "cons"
 
@@ -140,24 +142,29 @@ def test(args, model, device, test_loader):
     """ Test the model. """
     model.eval()
     test_loss = 0
+    test_loss_print = 0
     correct = 0
     if args.enc == "Feasibility":
         # binary cross entropy loss with sigmoid
         criterion = torch.nn.BCEWithLogitsLoss(reduction="sum")
+        criterion_print = torch.nn.BCEWithLogitsLoss(reduction="mean")
     else:
         # mse loss
         criterion = torch.nn.MSELoss(reduction="sum")
+        criterion_print = torch.nn.MSELoss(reduction="mean")
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
             test_loss += criterion(output, target).item()
+            test_loss_print += criterion_print(output, target).item()
             pred = torch.round(torch.sigmoid(output))
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.batch_sampler)
+    test_loss_print /= len(test_loader.batch_sampler)
 
-    print("\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(test_loss, correct,
+    print("\nTest set: Average loss: {:.6f}, Accuracy: {}/{} ({:.2f}%)\n".format(test_loss_print, correct,
                                                                                  len(test_loader.dataset),
                                                                                  100. * correct / len(
                                                                                      test_loader.dataset)))
@@ -187,22 +194,30 @@ def train_model(args):
     model_input_dim = x.shape[1]
 
     # use half of the data for training and testing each
+    # previously, no validation set was used
+    # now, the test set is split in proper test and val set
     x_train = x[:x.shape[0] // 2]
-    x_test = x[x.shape[0] // 2:]
+    x_test = x[x.shape[0] // 2: (x.shape[0] // 4 ) * 3]
+    x_val = x[(x.shape[0] // 4 ) * 3 :]
 
     y_train = y[:x.shape[0] // 2]
-    y_test = y[x.shape[0] // 2:]
+    y_test = y[x.shape[0] // 2: (x.shape[0] // 4 ) * 3]
+    y_val = y[(x.shape[0] // 4 ) * 3:]
 
-    tensor_x_train = torch.tensor(x_train, dtype=torch.float32)    # TODO Tensor previously without dtype
-    tensor_x_test = torch.tensor(x_test, dtype=torch.float32)      # TODO Tensor previously without dtype
-    tensor_y_train = torch.tensor(y_train, dtype=torch.float32)    # TODO Tensor previously without dtype
-    tensor_y_test = torch.tensor(y_test, dtype=torch.float32)      # TODO Tensor previously without dtype
+    tensor_x_train = torch.tensor(x_train, dtype=torch.float32)
+    tensor_x_val = torch.tensor(x_val, dtype=torch.float32)
+    tensor_x_test = torch.tensor(x_test, dtype=torch.float32)
+    tensor_y_train = torch.tensor(y_train, dtype=torch.float32)
+    tensor_y_val = torch.tensor(y_val, dtype=torch.float32)
+    tensor_y_test = torch.tensor(y_test, dtype=torch.float32)
 
     dataset_train = TensorDataset(tensor_x_train, tensor_y_train)
+    dataset_val = TensorDataset(tensor_x_val, tensor_y_val)
     dataset_test = TensorDataset(tensor_x_test, tensor_y_test)
 
     dataloader_train = DataLoader(dataset_train, **train_kwargs)
     dataloader_train_for_test = DataLoader(dataset_train, **test_kwargs)
+    dataloader_val = DataLoader(dataset_val, **test_kwargs)
     dataloader_test = DataLoader(dataset_test, **test_kwargs)
 
     model = SingleLPNet(model_input_dim) if args.architecture == "" else SingleLPNetCustom(model_input_dim, args.architecture)
@@ -213,6 +228,7 @@ def train_model(args):
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     train_loss = []
+    val_loss = []
     test_loss = []
     rtpt.step()
     rtpt = RTPT(name_initials="FB", experiment_name="xlp_training", max_iterations=args.epochs)
@@ -220,6 +236,7 @@ def train_model(args):
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, dataloader_train, optimizer, epoch)
         train_loss.append(test(args, model, device, dataloader_train_for_test))
+        val_loss.append(test(args, model, device, dataloader_val))
         test_loss.append(test(args, model, device, dataloader_test))
         scheduler.step()
         rtpt.step()  # (subtitle=f"{epoch}/{args.epochs}")
@@ -238,6 +255,8 @@ def train_model(args):
     else:
         info = util.make_info(args, c=c, a=a, b=b, x=x, y=y, sol=sol)
 
+    if args.return_loss:
+        return model, info, val_loss[-1]
     return model, info
 
 
@@ -584,6 +603,8 @@ def prepare_arguments():
                         help="name with which the model will be saved or loaded")
     parser.add_argument("--no-data-storing", action="store_true", default=False,
                         help="only save the model, not the data created for training the model")
+    parser.add_argument("--return-loss", action="store_true", default=False,
+                        help="return the loss as a single float, can be useful for hyperparameter optimization")
     # linear problem type
     parser.add_argument("--problem", type=str, default="SingleLP", metavar="ID", help="specify a specific LP")
     parser.add_argument("--dim-x", type=int, default=5, metavar="N", help="dimension of instance in LP")
@@ -633,7 +654,10 @@ def main(overwrite_argv=None):
     # get the model
     if not args.load_model:
         # train the model
-        model, info = train_model(args)
+        if args.return_loss:
+            model, info, loss = train_model(args)
+        else:
+            model, info = train_model(args)
     else:
         # load the model
         model, info = prepare_model(args)
@@ -641,6 +665,9 @@ def main(overwrite_argv=None):
     # obtain and visualize attributions
     if args.vis:
         apply_visualization(model, info, args)
+
+    if args.return_loss:
+        return loss
 
 
 if __name__ == "__main__":

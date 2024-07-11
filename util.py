@@ -55,6 +55,32 @@ def get_data_single_lp(args, num_x=None, random_seed=None):
     return c, a, b, x, y, sol
 
 
+def get_data_paramlp(args, param, num_x=None, random_seed=None, **kwargs):
+    """ Load data for a ParamLP neural network as specified by the problem argument. """
+
+    num_x = args.num_x if num_x is None else num_x
+    seed = args.seed if random_seed is None else random_seed
+
+    if param == "b":
+        vary_a = False
+        vary_b = True
+    elif param == "a":
+        vary_a = True
+        vary_b = False
+    else:
+        raise ValueError("Currently, param must be either \"a\" or \"b\"")
+
+    if args.problem == "ParamLP":
+        c, a, b, x, y, sol = lp.generate(args.dim_x, args.dim_b, seed, num_x, vary_b=vary_b, vary_a=vary_a, solve=True)
+    else:
+        raise RuntimeError(f"Problem {args.problem} is unknown for generating data")
+    if args.dim_x != x.shape[1]:
+        warn_str = "Warning, the specified dimension dim_x: {} does not fit the dimension of the toy problem {} " \
+                   "which is {}. The toy problem dimension will be used.".format(args.dim_x, args.problem, x.shape[1])
+        warnings.warn(warn_str)
+    return c, a, b, x, y, sol
+
+
 # The problem: I want to separate the model training and the visualization, so I want to visualize instance which fit
 # the trained model (same constant c, a, b; depending on the model) and generate data in the same way as done for
 # training and testing (looking at other, more different data is a different problem, this is not about that). What made

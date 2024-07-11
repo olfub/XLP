@@ -56,7 +56,7 @@ def visualize_single_lps(identifier, attr, c=None, a=None, b=None, x=None, pred=
         raise ValueError(f"There is no visualization implemented for the \"{identifier}\" problem")
 
 
-def visualize_lp(attr, a, b, x, pred, name):
+def visualize_lp(attr, a, b, x, pred, name, param="", param_attr=None):
     """ Visualize the attributions for a single LP as an equation Ax <= b. """
 
     # Get inputs in a more useful shape
@@ -67,14 +67,21 @@ def visualize_lp(attr, a, b, x, pred, name):
     attribution_cmap = plt.cm.RdBu
     violation_cmap = plt.cm.Purples
 
+    bounds = np.max(abs(attr))
+    if param != "":
+        bounds = np.max((bounds, np.max(abs(param_attr))))
+
     # idea: six subfigures (here separated by "|"): A | x | = | AX | <= | b
     fig, axs = plt.subplots(1, 6, figsize=(18, 3))
 
     # A
-    draw_matrix(axs[0], a, "A")
+    if param == "a":
+        param_attr = param_attr.reshape(a.shape)
+        draw_matrix(axs[0], a, "A", color_values=param_attr, vmin=-bounds, vmax=bounds, cmap=attribution_cmap)
+    else:
+        draw_matrix(axs[0], a, "A")
 
     # x
-    bounds = np.max(abs(attr))
     draw_matrix(axs[1], x, "x", color_values=attr, vmin=-bounds, vmax=bounds, cmap=attribution_cmap)
 
     # =
@@ -89,7 +96,10 @@ def visualize_lp(attr, a, b, x, pred, name):
     draw_text(axs[4], r"$\leq$")
 
     # b
-    draw_matrix(axs[5], b, "b")
+    if "b" in param:
+        draw_matrix(axs[5], b, "b", color_values=param_attr.T, vmin=-bounds, vmax=bounds, cmap=attribution_cmap)
+    else:
+        draw_matrix(axs[5], b, "b")
 
     set_colorbar(attribution_cmap, bounds)
 
